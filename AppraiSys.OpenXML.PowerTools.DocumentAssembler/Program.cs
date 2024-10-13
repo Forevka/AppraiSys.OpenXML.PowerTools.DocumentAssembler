@@ -1,20 +1,7 @@
-﻿using DevExpress.XtraRichEdit;
-using DevExpress.XtraRichEdit.API.Native;
-using DocumentFormat.OpenXml;
+﻿using AppraiSys.OpenXML.PowerTools.DocumentAssembler.ProcessingPipeline;
 using System.Xml.Linq;
-using AppraiSys.OpenXML.PowerTools.DocumentAssembler.ProcessingPipeline;
-using Document = DevExpress.XtraRichEdit.API.Native.Document;
-using Table = DevExpress.XtraRichEdit.API.Native.Table;
 
 namespace AppraiSys.OpenXML.PowerTools.DocumentAssembler;
-
-// this will be inserted as DocVariable
-public class DocvariableRenderedData
-{
-    public OpenXmlCompositeElement Element { get; set; } // may be table, image, etc
-
-    public string VariableName { get; set; }
-}
 
 internal class Program
 {
