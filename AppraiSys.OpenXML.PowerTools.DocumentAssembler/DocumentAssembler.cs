@@ -1,51 +1,67 @@
 ﻿// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using DocumentFormat.OpenXml.Packaging;
+using SkiaSharp;
 using System.Collections;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Schema;
 using System.Xml.XPath;
-using DocumentFormat.OpenXml.Packaging;
-using SkiaSharp;
+using Document = DevExpress.XtraRichEdit.API.Native.Document;
 using Path = System.IO.Path;
+using Table = DevExpress.XtraRichEdit.API.Native.Table;
 
 namespace AppraiSys.OpenXML.PowerTools.DocumentAssembler;
 
 public class DocumentAssembler
 {
-    public static WmlDocument AssembleDocument(WmlDocument templateDoc, XmlDocument data, out bool templateError)
+    public static MemoryStream AssembleDocument(WmlDocument templateDoc, XmlDocument data)
     {
         XDocument xDoc = data.GetXDocument();
-        return AssembleDocument(templateDoc, xDoc.Root, out templateError);
+        return AssembleDocument(templateDoc, xDoc.Root);
     }
 
-    public static WmlDocument AssembleDocument(WmlDocument templateDoc, XElement data, out bool templateError)
+    public static MemoryStream AssembleDocument(WmlDocument templateDoc, XElement data)
     {
         byte[] byteArray = templateDoc.DocumentByteArray;
-        using MemoryStream mem = new MemoryStream();
+        MemoryStream mem = new MemoryStream();
         mem.Write(byteArray, 0, byteArray.Length);
-        using (WordprocessingDocument wordDoc = WordprocessingDocument.Open(mem, true))
+        using WordprocessingDocument wordDoc = WordprocessingDocument.Open(mem, true);
+
+        if (RevisionAccepter.HasTrackedRevisions(wordDoc))
+            throw new OpenXmlPowerToolsException("Invalid DocumentAssembler template - contains tracked revisions");
+
+        // calculate and store the max docPr id for later use when adding image objects
+        var macDocPrId = GetMaxDocPrId(wordDoc);
+
+        var te = new TemplateError();
+        foreach (var part in wordDoc.ContentParts())
         {
-            if (RevisionAccepter.HasTrackedRevisions(wordDoc))
-                throw new OpenXmlPowerToolsException("Invalid DocumentAssembler template - contains tracked revisions");
-
-            // calculate and store the max docPr id for later use when adding image objects
-            var macDocPrId = GetMaxDocPrId(wordDoc);
-
-            var te = new TemplateError();
-            foreach (var part in wordDoc.ContentParts())
-            {
-                ProcessTemplatePart(data, te, part);
-            }
-            templateError = te.HasError;
-
-            // update image docPr ids for the whole document
-            FixUpDocPrIds(wordDoc, macDocPrId);
+            ProcessTemplatePart(data, te, part);
         }
-        WmlDocument assembledDocument = new WmlDocument("TempFileName.docx", mem.ToArray());
-        return assembledDocument;
+
+        var templateError = te.HasError;
+
+        // update image docPr ids for the whole document
+        FixUpDocPrIds(wordDoc, macDocPrId);
+
+        return mem;
+    }
+
+
+    // This method generates a table:
+    static Table GenerateTable(Document document)
+    {
+        Table table = document.Tables.Create(document.Range.Start, 3, 3);
+
+        document.InsertSingleLineText(table.Rows[0].Cells[1].Range.Start, "Active Customers");
+        document.InsertSingleLineText(table[1, 0].Range.Start, "Photo");
+        document.InsertSingleLineText(table[1, 1].Range.Start, "Customer Info");
+        document.InsertSingleLineText(table[1, 2].Range.Start, "Rentals");
+
+        return table;
     }
 
     private static void ProcessTemplatePart(XElement data, TemplateError te, OpenXmlPart part)
